@@ -15,7 +15,7 @@ connectDB();
 const corsOptions = {
   origin: [
     'http://localhost:5173', // Vite dev server
-    'http://localhost:3000', // Alternative frontend port
+    'https://highway-delite-six.vercel.app/', // Actual frontend
     'http://127.0.0.1:5173', // Alternative localhost format
   ],
   credentials: true, // Allow cookies/auth headers
