@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth, useUser } from "@clerk/clerk-react";
 import { toast } from "sonner";
 import axiosInstance from "../hooks/axiosInstance";
-import axios from "axios";
 
 const SSOCallback = () => {
   const { getToken, userId, isSignedIn, isLoaded } = useAuth();
+  const { user, isLoaded: isUserLoaded } = useUser();
   const navigate = useNavigate();
   const [isProcessing, setIsProcessing] = useState(true);
 
@@ -15,14 +15,23 @@ const SSOCallback = () => {
       console.log("SSO Callback - Auth state:", { isLoaded, isSignedIn, userId });
 
       // Wait for Clerk to be fully loaded
-      if (!isLoaded) {
+      if (!isLoaded || !isUserLoaded) {
         console.log("Clerk not loaded yet, waiting...");
         return;
       }
 
-      // If not signed in, redirect to login with error
-      if (!isSignedIn || !userId) {
-        console.log("Not signed in, redirecting to login");
+      // Check if we're still in the handshake process
+      const urlParams = new URLSearchParams(window.location.search);
+      const hasHandshakeParam = urlParams.has("__clerk_handshake");
+      
+      if (hasHandshakeParam) {
+        console.log("Still in handshake process, waiting...");
+        return;
+      }
+
+      // If not signed in after handshake is complete, redirect to login with error
+      if (!isSignedIn || !userId || !user) {
+        console.log("Not signed in after handshake, redirecting to login");
         toast.error("Authentication failed. Please try again.");
         navigate("/login", { replace: true });
         return;
@@ -41,22 +50,14 @@ const SSOCallback = () => {
           return;
         }
 
-        // Fetch user data from Clerk's backend API
-        const userResponse = await axios.get(`https://api.clerk.com/v1/users/${userId}`, {
-          headers: {
-            Authorization: `Bearer ${sessionToken}`,
-            "Content-Type": "application/json",
-          },
-        });
-
-        const clerkUser = userResponse.data;
-        console.log("Clerk user:", clerkUser);
+        // Use client-side user data from Clerk
+        console.log("Using client-side user data:", user);
         
         const userData = {
-          user_id: clerkUser.id,
-          email: clerkUser.email_addresses?.[0]?.email_address || "",
-          name: `${clerkUser.first_name || ""} ${clerkUser.last_name || ""}`.trim() || clerkUser.username || "",
-          image: clerkUser.image_url || "",
+          user_id: user.id,
+          email: user.emailAddresses?.[0]?.emailAddress || "",
+          name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.username || "",
+          image: user.imageUrl || "",
           authProvider: "google",
           sessionToken,
         };
@@ -70,6 +71,9 @@ const SSOCallback = () => {
           if (sessionToken) {
             localStorage.setItem("clerk_session_token", sessionToken);
           }
+          
+          // Clean up URL parameters
+          window.history.replaceState({}, document.title, window.location.pathname);
           
           toast.success("Successfully signed in with Google!");
           navigate("/dashboard", { replace: true });
@@ -93,9 +97,9 @@ const SSOCallback = () => {
     };
 
     // Small delay to ensure Clerk state is fully updated
-    const timer = setTimeout(handleOAuthCallback, 500);
+    const timer = setTimeout(handleOAuthCallback, 1000);
     return () => clearTimeout(timer);
-  }, [isLoaded, isSignedIn, userId, getToken, navigate]);
+  }, [isLoaded, isUserLoaded, isSignedIn, userId, user, getToken, navigate]);
 
   if (isProcessing) {
     return (
