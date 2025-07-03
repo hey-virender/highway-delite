@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, useUser } from "@clerk/clerk-react";
 import { toast } from "sonner";
@@ -9,50 +9,43 @@ const SSOCallback = () => {
   const { user, isLoaded: isUserLoaded } = useUser();
   const navigate = useNavigate();
   const [isProcessing, setIsProcessing] = useState(true);
+  const hasProcessedRef = useRef(false);
 
   useEffect(() => {
+    if (hasProcessedRef.current) return;
+  
+    if (!isLoaded || !isUserLoaded) {
+      console.log("Clerk not ready");
+      return;
+    }
+  
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has("__clerk_handshake")) {
+      console.log("Handshake in progress...");
+      return;
+    }
+  
+    // Lock execution before any async/redirect
+    hasProcessedRef.current = true;
+  
     const handleOAuthCallback = async () => {
-      console.log("SSO Callback - Auth state:", { isLoaded, isSignedIn, userId });
-
-      // Wait for Clerk to be fully loaded
-      if (!isLoaded || !isUserLoaded) {
-        console.log("Clerk not loaded yet, waiting...");
-        return;
-      }
-
-      // Check if we're still in the handshake process
-      const urlParams = new URLSearchParams(window.location.search);
-      const hasHandshakeParam = urlParams.has("__clerk_handshake");
-      
-      if (hasHandshakeParam) {
-        console.log("Still in handshake process, waiting...");
-        return;
-      }
-
-      // If not signed in after handshake is complete, redirect to login with error
       if (!isSignedIn || !userId || !user) {
         console.log("Not signed in after handshake, redirecting to login");
         toast.error("Authentication failed. Please try again.");
         navigate("/login", { replace: true });
         return;
       }
-
+  
       try {
-        console.log("Processing OAuth callback for user:", userId);
         setIsProcessing(true);
-
-        // Get the session token
+  
         const sessionToken = await getToken();
-        
         if (!sessionToken) {
-          toast.error("Failed to get session token");
+          toast.error("Session token missing");
           navigate("/login", { replace: true });
           return;
         }
-
-        // Use client-side user data from Clerk
-        console.log("Using client-side user data:", user);
-        
+  
         const userData = {
           user_id: user.id,
           email: user.emailAddresses?.[0]?.emailAddress || "",
@@ -61,45 +54,32 @@ const SSOCallback = () => {
           authProvider: "google",
           sessionToken,
         };
-
-        console.log("Sending user data to backend:", userData);
-        
-        const response = await axiosInstance.post("/user/create", userData);
-        
-        if (response.data.success) {
-          // Store session token
-          if (sessionToken) {
-            localStorage.setItem("clerk_session_token", sessionToken);
-          }
-          
-          // Clean up URL parameters
+  
+        console.log("Syncing with backend:", userData);
+  
+        const res = await axiosInstance.post("/user/create", userData);
+  
+        if (res.data.success) {
+          localStorage.setItem("clerk_session_token", sessionToken);
           window.history.replaceState({}, document.title, window.location.pathname);
-          
-          toast.success("Successfully signed in with Google!");
+          toast.success("Signed in!");
           navigate("/dashboard", { replace: true });
         } else {
-          toast.error(response.data.message || "Failed to sign in");
+          toast.error("Backend failed to create user.");
           navigate("/login", { replace: true });
         }
       } catch (err: any) {
-        console.error("SSO Callback Error:", err);
-        
-        if (err.response?.status === 401) {
-          toast.error("Authentication failed. Please try again.");
-        } else {
-          toast.error(err.response?.data?.message || "Failed to sign in with Google");
-        }
-        
+        console.error("Error syncing with backend", err);
+        toast.error("Something went wrong. Please try again.");
         navigate("/login", { replace: true });
       } finally {
         setIsProcessing(false);
       }
     };
-
-    // Small delay to ensure Clerk state is fully updated
-    const timer = setTimeout(handleOAuthCallback, 1000);
-    return () => clearTimeout(timer);
+  
+    handleOAuthCallback();
   }, [isLoaded, isUserLoaded, isSignedIn, userId, user, getToken, navigate]);
+  
 
   if (isProcessing) {
     return (

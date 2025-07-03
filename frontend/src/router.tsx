@@ -1,9 +1,10 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
-import SSOCallback from './pages/SSOCallback';
-import DashboardWrapper from './components/DashboardWrapper';
+import Dashboard from './pages/Dashboard';
+import ProtectedRoute from './components/ProtectedRoute';
 import AuthGuard from './components/AuthGuard';
+import SSOCallback from './pages/SSOCallback';
 
 export default function AppRouter() {
   return (
@@ -44,7 +45,11 @@ export default function AppRouter() {
         {/* Protected routes - require authentication */}
         <Route 
           path="/dashboard" 
-          element={<DashboardWrapper />} 
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } 
         />
 
         {/* Catch-all route for any unmatched paths - redirect to login */}
