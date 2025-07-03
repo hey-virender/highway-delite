@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import SSOCallback from './pages/SSOCallback';
 import DashboardWrapper from './components/DashboardWrapper';
 import AuthGuard from './components/AuthGuard';
 
@@ -34,10 +35,26 @@ export default function AppRouter() {
           } 
         />
 
+        {/* SSO Callback route - handles OAuth redirects */}
+        <Route 
+          path="/sso-callback" 
+          element={<SSOCallback />} 
+        />
+
         {/* Protected routes - require authentication */}
         <Route 
           path="/dashboard" 
           element={<DashboardWrapper />} 
+        />
+
+        {/* Catch-all route for any unmatched paths - redirect to login */}
+        <Route 
+          path="*" 
+          element={
+            <AuthGuard>
+              <Login />
+            </AuthGuard>
+          } 
         />
       </Routes>
     </BrowserRouter>

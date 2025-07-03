@@ -1,5 +1,5 @@
 import { Eye, EyeOff } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSignIn, useAuth } from "@clerk/clerk-react";
 import { toast } from "sonner";
@@ -8,15 +8,13 @@ import axios, { AxiosError } from "axios";
 
 const Login = () => {
   const { signIn } = useSignIn();
-  const { getToken, userId, isSignedIn, isLoaded } = useAuth();
+  const { getToken, userId } = useAuth();
   const navigate = useNavigate();
   const [showOtp, setShowOtp] = useState(false);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [showOtpField, setShowOtpField] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasHandledOAuth, setHasHandledOAuth] = useState(false);
-  const retryCount = useRef(0);
 
   // Error states for each field
   const [errors, setErrors] = useState({
@@ -43,96 +41,7 @@ const Login = () => {
     }
   };
 
-  // Robust Google OAuth handler using Clerk's backend API
-  useEffect(() => {
-    const handleGoogleOAuth = async () => {
-      // Check if this is an OAuth callback (multiple possible parameters)
-      const urlParams = new URLSearchParams(window.location.search);
-      const isOAuthCallback = urlParams.has("code") || 
-                             urlParams.has("__clerk_status") || 
-                             urlParams.has("__clerk_handshake");
-      
-      if (!isLoaded || hasHandledOAuth || !isOAuthCallback) {
-        return;
-      }
 
-      // If we're in OAuth flow but not signed in yet, wait and retry
-      if (!isSignedIn || !userId) {
-        if (retryCount.current < 20) {
-          retryCount.current += 1;
-          setTimeout(() => {
-            // This will trigger the effect again
-          }, 500);
-        } else {
-          toast.error("OAuth authentication timed out. Please try again.");
-        }
-        return;
-      }
-
-      console.log("Handling Google OAuth with userId:", userId);
-      setHasHandledOAuth(true);
-      setIsLoading(true);
-
-      try {
-        const sessionToken = await getToken();
-        
-        if (!sessionToken) {
-          toast.error("Failed to get session token");
-          setIsLoading(false);
-          return;
-        }
-
-        // Fetch user data from Clerk's backend API
-        const userResponse = await axios.get(`https://api.clerk.com/v1/users/${userId}`, {
-          headers: {
-            Authorization: `Bearer ${sessionToken}`,
-            "Content-Type": "application/json",
-          },
-        });
-
-        const clerkUser = userResponse.data;
-        
-        const userData = {
-          user_id: clerkUser.id,
-          email: clerkUser.email_addresses?.[0]?.email_address || "",
-          name: `${clerkUser.first_name || ""} ${clerkUser.last_name || ""}`.trim() || clerkUser.username || "",
-          image: clerkUser.image_url || "",
-          authProvider: "google",
-          sessionToken,
-        };
-
-        console.log("Sending user data to backend:", userData);
-        
-        const response = await axiosInstance.post("/user/create", userData);
-        
-        if (response.data.success) {
-          if (sessionToken) {
-            localStorage.setItem("clerk_session_token", sessionToken);
-          }
-          toast.success("Successfully signed in with Google!");
-          // Clean up URL params and navigate
-          window.history.replaceState({}, document.title, window.location.pathname);
-          // Small delay to ensure state is updated
-          setTimeout(() => {
-            navigate("/dashboard", { replace: true });
-          }, 100);
-        } else {
-          toast.error(response.data.message || "Failed to sign in");
-        }
-      } catch (err: any) {
-        console.error("Google OAuth Error:", err);
-        if (err.response?.status === 401) {
-          toast.error("Authentication failed. Please try again.");
-        } else {
-          toast.error(err.response?.data?.message || "Failed to sign in with Google");
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    handleGoogleOAuth();
-  }, [isLoaded, isSignedIn, userId, getToken, navigate, hasHandledOAuth]);
 
   const handleSendOtp = async () => {
     // Clear previous errors
@@ -266,8 +175,8 @@ const Login = () => {
     try {
       await signIn!.authenticateWithRedirect({
         strategy: "oauth_google",
-        redirectUrl: window.location.origin + "/login",
-        redirectUrlComplete: window.location.origin + "/dashboard", // Back to dashboard - now handled properly
+        redirectUrl: window.location.origin + "/sso-callback",
+        redirectUrlComplete: window.location.origin + "/sso-callback", 
       });
       
       setIsLoading(false);  
