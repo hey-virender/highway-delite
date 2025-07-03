@@ -1,8 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
-import Dashboard from './pages/Dashboard';
-import ProtectedRoute from './components/ProtectedRoute';
+import DashboardWrapper from './components/DashboardWrapper';
 import AuthGuard from './components/AuthGuard';
 
 export default function AppRouter() {
@@ -38,11 +37,7 @@ export default function AppRouter() {
         {/* Protected routes - require authentication */}
         <Route 
           path="/dashboard" 
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          } 
+          element={<DashboardWrapper />} 
         />
       </Routes>
     </BrowserRouter>

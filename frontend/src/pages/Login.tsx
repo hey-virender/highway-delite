@@ -46,17 +46,25 @@ const Login = () => {
   // Robust Google OAuth handler using Clerk's backend API
   useEffect(() => {
     const handleGoogleOAuth = async () => {
-      // Check if this is an OAuth callback (either from URL params or we just completed OAuth)
+      // Check if this is an OAuth callback (multiple possible parameters)
       const urlParams = new URLSearchParams(window.location.search);
-      const isOAuthCallback = urlParams.has("code") || urlParams.has("__clerk_status");
+      const isOAuthCallback = urlParams.has("code") || 
+                             urlParams.has("__clerk_status") || 
+                             urlParams.has("__clerk_handshake");
       
-      if (!isLoaded || !isSignedIn || !userId || hasHandledOAuth || !isOAuthCallback) {
-        // If user is not ready but we're in OAuth flow, retry
-        if (isOAuthCallback && !hasHandledOAuth && retryCount.current < 20) {
+      if (!isLoaded || hasHandledOAuth || !isOAuthCallback) {
+        return;
+      }
+
+      // If we're in OAuth flow but not signed in yet, wait and retry
+      if (!isSignedIn || !userId) {
+        if (retryCount.current < 20) {
           retryCount.current += 1;
           setTimeout(() => {
             // This will trigger the effect again
           }, 500);
+        } else {
+          toast.error("OAuth authentication timed out. Please try again.");
         }
         return;
       }
@@ -102,9 +110,12 @@ const Login = () => {
             localStorage.setItem("clerk_session_token", sessionToken);
           }
           toast.success("Successfully signed in with Google!");
-          // Clean up URL params
+          // Clean up URL params and navigate
           window.history.replaceState({}, document.title, window.location.pathname);
-          navigate("/dashboard");
+          // Small delay to ensure state is updated
+          setTimeout(() => {
+            navigate("/dashboard", { replace: true });
+          }, 100);
         } else {
           toast.error(response.data.message || "Failed to sign in");
         }
@@ -256,7 +267,7 @@ const Login = () => {
       await signIn!.authenticateWithRedirect({
         strategy: "oauth_google",
         redirectUrl: window.location.origin + "/login",
-        redirectUrlComplete: window.location.origin + "/dashboard",
+        redirectUrlComplete: window.location.origin + "/dashboard", // Back to dashboard - now handled properly
       });
       
       setIsLoading(false);  
