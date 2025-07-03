@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import dotenv from 'dotenv';
 import connectDB from './config/connectDB';
 import userRoutes from './routes/user.routes';
@@ -10,6 +11,25 @@ const app = express();
 
 connectDB();
 
+// CORS configuration
+const corsOptions = {
+  origin: [
+    'http://localhost:5173', // Vite dev server
+    'http://localhost:3000', // Alternative frontend port
+    'http://127.0.0.1:5173', // Alternative localhost format
+  ],
+  credentials: true, // Allow cookies/auth headers
+  optionsSuccessStatus: 200, // Support legacy browsers
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'clerk_session_token', // Allow custom Clerk session token header
+  ],
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.use('/api/user', userRoutes);

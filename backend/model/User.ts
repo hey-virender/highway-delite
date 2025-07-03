@@ -8,6 +8,9 @@ interface IUser {
   email: string;
   image?: string,
   authProvider: string,
+  sessionToken?: string,
+  sessionExpiry?: Date,
+  isActive?: boolean,
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -18,7 +21,10 @@ const userSchema = new mongoose.Schema<IUser>({
   image: { type: String, required: false },
   name: { type: String, required: true },
   dob: { type: Date, required: true },
-  authProvider: { type: String, required: true ,enum: ['google','email']},
+  authProvider: { type: String, required: true, enum: ['google', 'email'] },
+  sessionToken: { type: String, required: false },
+  sessionExpiry: { type: Date, required: false },
+  isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 
 const User = mongoose.models.User || mongoose.model<IUser>('User', userSchema);

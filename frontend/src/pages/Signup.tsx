@@ -3,7 +3,9 @@ import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { signupSchema } from "../schemas/validations";
 import { toast } from "sonner";
-import { supabase } from "../../lib/supbaseBaseClient";
+import { useSignUp, useAuth } from "@clerk/clerk-react";
+import axiosInstance from "../hooks/axiosInstance";
+import axios, { AxiosError } from "axios";
 
 function formatDate(dateStr: string) {
   if (!dateStr) return "";
@@ -16,14 +18,17 @@ function formatDate(dateStr: string) {
 }
 
 const Signup = () => {
+  const { signUp } = useSignUp();
+  const { getToken } = useAuth();
   const [showOtp, setShowOtp] = useState(false);
   const [dob, setDob] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
+  const [showOtpField, setShowOtpField] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleSignup = async () => {
+  const handleSendOtp = async () => {
     const formData = {
       name,
       email,
@@ -35,12 +40,117 @@ const Signup = () => {
       toast.error(validation.error.errors[0].message);
       return;
     }
-    const { error } = await supabase.auth.signInWithOtp({ email });
-    if (error) {
-      toast.error(error.message);
+    try {
+      // First create the sign-up with a temporary password
+      await signUp!.create({
+        emailAddress: email,
+        password: `TempPass${Date.now()}!`, // Temporary password that meets requirements
+      });
+
+      // Then prepare email verification (send OTP)
+      await signUp!.prepareEmailAddressVerification({
+        strategy: "email_code",
+      });
+
+      setShowOtpField(true);
+      toast.success("OTP sent to your email");
+    } catch (err: unknown) {
+      const error = err as { errors?: Array<{ message: string }> };
+      toast.error(error.errors?.[0]?.message || "Failed to send OTP");
+      console.log(err);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otp) {
+      toast.error("Please enter the OTP");
       return;
     }
-    toast.success("OTP sent to your email");
+
+    try {
+      // Verify the OTP and complete signup
+      const result = await signUp!.attemptEmailAddressVerification({
+        code: otp,
+      });
+
+      console.log(result);
+      
+      // Check if signup was successful and session was created
+      if (result.status === "complete" && result.createdSessionId) {
+        // Wait a moment for Clerk to update auth state
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Get the session token after successful signup
+        const sessionToken = await getToken();
+        
+        // Get user ID from result or extract from token
+        let userIdToUse = result.createdUserId || signUp!.createdUserId;
+        
+        if (!userIdToUse && sessionToken) {
+          try {
+            const tokenPayload = JSON.parse(atob(sessionToken.split('.')[1]));
+            userIdToUse = tokenPayload?.sub;
+          } catch (error) {
+            console.error("Could not extract user ID from token:", error);
+          }
+        }
+        
+        if (!userIdToUse) {
+          toast.error("Failed to get user information. Please try again.");
+          return;
+        }
+        
+        const userData = {
+          user_id: userIdToUse,
+          email: result.emailAddress || signUp!.emailAddress,
+          dob,
+          name,
+          authProvider: 'email',
+          sessionToken, // Include session token
+        };
+        
+        console.log(userData);
+        
+        // Send data to backend to create user and store session
+        const response = await axiosInstance.post(
+          "/user/create",
+          userData,
+        );
+
+        if (response.status === 200 || response.status === 201) {
+          // Store session token in localStorage for future requests
+          if (sessionToken) {
+            localStorage.setItem('clerk_session_token', sessionToken);
+          }
+          
+          toast.success("Sign up successful! User created.");
+          // Redirect to dashboard or protected route
+          window.location.href = "/dashboard";
+        } else {
+          toast.error("Failed to create user in database");
+        }
+      } else {
+        toast.error("Signup verification failed");
+      }
+    } catch (err: unknown) {
+      // Handle Clerk errors
+      if (err && typeof err === "object" && "errors" in err) {
+        const clerkError = err as { errors?: Array<{ message: string }> };
+        toast.error(clerkError.errors?.[0]?.message || "Failed to verify OTP");
+      }
+      // Handle axios/backend errors
+      else if (axios.isAxiosError(err)) {
+        const axiosError = err as AxiosError;
+        toast.error(
+          (axiosError.response?.data as any)?.message || "Failed to create user in backend",
+        );
+      }
+      // Handle other errors
+      else {
+        toast.error("An unexpected error occurred");
+      }
+      console.log(err);
+    }
   };
 
   return (
@@ -49,14 +159,14 @@ const Signup = () => {
         <div className="flex justify-center mt-7 md:absolute md:top-0 md:left-7">
           <img src="/logo.png" alt="logo" />
         </div>
-        <h1 className="text-4xl font-bold text-center mt-5 md:text-left">
+        <h1 className="mt-5 text-4xl font-bold text-center md:text-left">
           Sign up
         </h1>
         <p className="text-center text-[#969696] mt-3 md:text-left">
           Sign up to enjoy the feature of HD
         </p>
 
-        <div className="mt-10 flex flex-col gap-6">
+        <div className="flex flex-col gap-6 mt-10">
           <div className="relative">
             <label
               className="absolute -top-3 bg-white left-3 text-sm text-[#969696]"
@@ -80,32 +190,30 @@ const Signup = () => {
             >
               Date of Birth
             </label>
-            <div className="flex items-center border border-[#969696] rounded-md p-3 w-full focus-within:border-blue-500 bg-white relative">
-              <button
-                type="button"
-                className="mr-1 focus:outline-none z-20"
-                onClick={() => inputRef.current?.showPicker()}
-                tabIndex={-1}
-                style={{ background: "transparent" }}
-              >
+            <div
+              className="flex items-center border border-[#969696] rounded-md p-3 w-full focus-within:border-blue-500 bg-white relative cursor-pointer"
+              onClick={() => inputRef.current?.showPicker()}
+              tabIndex={0}
+              role="button"
+              aria-label="Pick date of birth"
+            >
+              <span className="z-20 mr-1 black">
                 <Calendar size={22} />
-              </button>
+              </span>
               <input
                 ref={inputRef}
-                className="flex-1 text-lg text-black outline-none border-none bg-transparent appearance-none pl-8
-                  [&::-webkit-calendar-picker-indicator]:opacity-0
-                  [&::-webkit-calendar-picker-indicator]:pointer-events-none
-                  [&::-webkit-inner-spin-button]:appearance-none
-                  [&::-webkit-clear-button]:appearance-none"
+                className="absolute top-0 left-0 z-30 w-full h-full opacity-0 cursor-pointer"
                 type="date"
                 id="dob"
                 value={dob}
                 onChange={(e) => setDob(e.target.value)}
+                tabIndex={-1}
+                aria-label="Date of Birth"
                 style={{
                   MozAppearance: "textfield",
                 }}
               />
-              <span className="absolute left-10 text-lg text-black pointer-events-none select-none z-10">
+              <span className="z-10 ml-2 text-lg text-black pointer-events-none select-none">
                 {dob ? (
                   formatDate(dob)
                 ) : (
@@ -132,44 +240,47 @@ const Signup = () => {
             />
           </div>
 
-          <div className="relative">
-            <input
-              className="w-full border border-[#969696] text-lg text-black rounded-md p-3 focus:border-blue-500"
-              type={showOtp ? "text" : "password"}
-              id="otp"
-              placeholder="OTP"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-            />
-            <button
-              type="button"
-              className="absolute right-3 top-1/2 -translate-y-1/2"
-              onClick={() => setShowOtp(!showOtp)}
-            >
-              {showOtp ? <EyeOff size={22} /> : <Eye size={22} />}
-            </button>
-          </div>
+          {showOtpField && (
+            <div className="relative">
+              <input
+                className="w-full border border-[#969696] text-lg text-black rounded-md p-3 focus:border-blue-500"
+                type={showOtp ? "text" : "password"}
+                id="otp"
+                placeholder="OTP"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2"
+                onClick={() => setShowOtp(!showOtp)}
+              >
+                {showOtp ? <EyeOff size={22} /> : <Eye size={22} />}
+              </button>
+            </div>
+          )}
+
           <button
-            onClick={handleSignup}
-            className="bg-blue-500 text-white p-3 rounded-md"
+            onClick={showOtpField ? handleVerifyOtp : handleSendOtp}
+            className="p-3 text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors"
           >
-            Sign up
+            {showOtpField ? "Sign up" : "Send OTP"}
           </button>
         </div>
         <p className="text-center text-[#969696] mt-3">
           Already have an account?{" "}
           <Link
-            className="text-blue-500 font-semibold hover:underline"
+            className="font-semibold text-blue-500 hover:underline"
             to="/login"
           >
             Login
           </Link>
         </p>
       </div>
-      <div className="hidden md:block md:h-screen w-1/2 py-3 rounded-lg overflow-hidden">
+      <div className="hidden overflow-hidden py-3 w-1/2 rounded-lg md:block md:h-screen">
         <img
           src="/container.png"
-          className="w-full h-full object-cover rounded-lg"
+          className="object-cover w-full h-full rounded-lg"
           alt="container"
         />
       </div>
