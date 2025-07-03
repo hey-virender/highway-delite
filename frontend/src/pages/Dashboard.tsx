@@ -83,9 +83,7 @@ const Dashboard = () => {
         <p className="text-2xl">
           Email: {userData?.email || user?.emailAddresses?.[0]?.emailAddress || 'N/A'}
         </p>
-        <p className="text-lg text-gray-600">
-          Auth Provider: {userData?.authProvider || 'N/A'}
-        </p>
+        
       </div>
       <div className="my-10">
         <button 

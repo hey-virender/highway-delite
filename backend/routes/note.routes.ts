@@ -5,9 +5,9 @@ import { verifyClerkSession } from '../middleware/verifyClerkSession';
 const router = Router();
 
 // All note routes require authentication
-router.post('/create', verifyClerkSession as RequestHandler, createNote as RequestHandler);
-router.get('/', verifyClerkSession as RequestHandler, getNotes as RequestHandler);
-router.put('/:note_id', verifyClerkSession as RequestHandler, updateNote as RequestHandler);
-router.delete('/:note_id', verifyClerkSession as RequestHandler, deleteNote as RequestHandler);
+router.post('/create', verifyClerkSession as any, createNote as any);
+router.get('/', verifyClerkSession as any, getNotes as any);
+router.put('/:note_id', verifyClerkSession as any, updateNote as any);
+router.delete('/:note_id', verifyClerkSession as any, deleteNote as any);
 
 export default router;

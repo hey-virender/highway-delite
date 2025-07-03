@@ -1,7 +1,7 @@
 import { Eye, EyeOff } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useSignIn, useAuth, useUser } from "@clerk/clerk-react";
+import { useSignIn, useAuth } from "@clerk/clerk-react";
 import { toast } from "sonner";
 import axiosInstance from "../hooks/axiosInstance";
 import axios, { AxiosError } from "axios";
@@ -9,7 +9,6 @@ import axios, { AxiosError } from "axios";
 const Login = () => {
   const { signIn } = useSignIn();
   const { getToken, userId, isSignedIn, isLoaded } = useAuth();
-  const { user } = useUser();
   const navigate = useNavigate();
   const [showOtp, setShowOtp] = useState(false);
   const [email, setEmail] = useState("");
@@ -19,70 +18,120 @@ const Login = () => {
   const [hasHandledOAuth, setHasHandledOAuth] = useState(false);
   const retryCount = useRef(0);
 
-  // Robust Google OAuth callback handler with retry for new users
-  useEffect(() => {
-    const handleOAuth = async () => {
-      if (!isLoaded || !isSignedIn || !userId || !user || hasHandledOAuth) return;
-      const urlParams = new URLSearchParams(window.location.search);
-      const isOAuth = urlParams.has("code") || window.location.pathname === "/sso-callback";
-      if (!isOAuth) return;
+  // Error states for each field
+  const [errors, setErrors] = useState({
+    email: "",
+    otp: ""
+  });
 
-      setHasHandledOAuth(true);
-      setIsLoading(true);
-      const sessionToken = await getToken();
-      if (!sessionToken) {
-        toast.error("Failed to get session token");
-        setIsLoading(false);
+  // Email validation function
+  const validateEmail = (email: string): string => {
+    if (!email) {
+      return "Please enter your email";
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return "Please enter a valid email address";
+    }
+    return "";
+  };
+
+  // Clear error for specific field when user starts typing
+  const clearFieldError = (fieldName: keyof typeof errors) => {
+    if (errors[fieldName]) {
+      setErrors(prev => ({ ...prev, [fieldName]: "" }));
+    }
+  };
+
+  // Robust Google OAuth handler using Clerk's backend API
+  useEffect(() => {
+    const handleGoogleOAuth = async () => {
+      // Check if this is an OAuth callback (either from URL params or we just completed OAuth)
+      const urlParams = new URLSearchParams(window.location.search);
+      const isOAuthCallback = urlParams.has("code") || urlParams.has("__clerk_status");
+      
+      if (!isLoaded || !isSignedIn || !userId || hasHandledOAuth || !isOAuthCallback) {
+        // If user is not ready but we're in OAuth flow, retry
+        if (isOAuthCallback && !hasHandledOAuth && retryCount.current < 20) {
+          retryCount.current += 1;
+          setTimeout(() => {
+            // This will trigger the effect again
+          }, 500);
+        }
         return;
       }
-      const userData = {
-        user_id: userId,
-        email: user.emailAddresses?.[0]?.emailAddress || "",
-        name: user.fullName || user.firstName || user.username || "",
-        image: user.imageUrl || "",
-        authProvider: "google",
-        sessionToken,
-      };
+
+      console.log("Handling Google OAuth with userId:", userId);
+      setHasHandledOAuth(true);
+      setIsLoading(true);
+
       try {
+        const sessionToken = await getToken();
+        
+        if (!sessionToken) {
+          toast.error("Failed to get session token");
+          setIsLoading(false);
+          return;
+        }
+
+        // Fetch user data from Clerk's backend API
+        const userResponse = await axios.get(`https://api.clerk.com/v1/users/${userId}`, {
+          headers: {
+            Authorization: `Bearer ${sessionToken}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        const clerkUser = userResponse.data;
+        
+        const userData = {
+          user_id: clerkUser.id,
+          email: clerkUser.email_addresses?.[0]?.email_address || "",
+          name: `${clerkUser.first_name || ""} ${clerkUser.last_name || ""}`.trim() || clerkUser.username || "",
+          image: clerkUser.image_url || "",
+          authProvider: "google",
+          sessionToken,
+        };
+
+        console.log("Sending user data to backend:", userData);
+        
         const response = await axiosInstance.post("/user/create", userData);
+        
         if (response.data.success) {
-          localStorage.setItem("clerk_session_token", sessionToken);
+          if (sessionToken) {
+            localStorage.setItem("clerk_session_token", sessionToken);
+          }
+          toast.success("Successfully signed in with Google!");
+          // Clean up URL params
           window.history.replaceState({}, document.title, window.location.pathname);
           navigate("/dashboard");
         } else {
           toast.error(response.data.message || "Failed to sign in");
         }
-      } catch (error: any) {
-        toast.error(error.response?.data?.message || "Authentication failed");
+      } catch (err: any) {
+        console.error("Google OAuth Error:", err);
+        if (err.response?.status === 401) {
+          toast.error("Authentication failed. Please try again.");
+        } else {
+          toast.error(err.response?.data?.message || "Failed to sign in with Google");
+        }
       } finally {
         setIsLoading(false);
       }
     };
 
-    // If user is not ready, retry a few times
-    if (
-      isLoaded &&
-      isSignedIn &&
-      (!user || !userId || !user.emailAddresses?.[0]?.emailAddress) &&
-      !hasHandledOAuth
-    ) {
-      if (retryCount.current < 10) {
-        retryCount.current += 1;
-        setTimeout(() => {
-          setHasHandledOAuth(false); // This will trigger the effect again
-        }, 500);
-      } else {
-        toast.error("Failed to load user info from Google. Please try again.");
-      }
-      return;
-    }
-
-    handleOAuth();
-  }, [isLoaded, isSignedIn, userId, user, getToken, navigate, hasHandledOAuth]);
+    handleGoogleOAuth();
+  }, [isLoaded, isSignedIn, userId, getToken, navigate, hasHandledOAuth]);
 
   const handleSendOtp = async () => {
-    if (!email) {
-      toast.error("Please enter your email");
+    // Clear previous errors
+    setErrors({ email: "", otp: "" });
+    
+    // Validate email
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setErrors(prev => ({ ...prev, email: emailError }));
+      toast.error(emailError);
       return;
     }
     setIsLoading(true);
@@ -115,8 +164,18 @@ const Login = () => {
   };
 
   const handleVerifyOtp = async () => {
+    // Clear OTP error
+    setErrors(prev => ({ ...prev, otp: "" }));
+    
     if (!otp) {
+      setErrors(prev => ({ ...prev, otp: "Please enter the OTP" }));
       toast.error("Please enter the OTP");
+      return;
+    }
+    
+    if (otp.length < 4) {
+      setErrors(prev => ({ ...prev, otp: "OTP must be at least 4 characters" }));
+      toast.error("Please enter a valid OTP");
       return;
     }
     setIsLoading(true);
@@ -194,12 +253,13 @@ const Login = () => {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      
       await signIn!.authenticateWithRedirect({
         strategy: "oauth_google",
-        redirectUrl: window.location.origin + "/sso-callback",
+        redirectUrl: window.location.origin + "/login",
         redirectUrlComplete: window.location.origin + "/dashboard",
       });
+      
+      setIsLoading(false);  
     } catch (err: unknown) {
       console.error("Google sign-in error:", err);
       const error = err as { errors?: Array<{ message: string }> };
@@ -227,24 +287,35 @@ const Login = () => {
               Email
             </label>
             <input
-              className="w-full border border-[#969696] text-lg text-black rounded-md p-3 focus:border-blue-500"
+              className={`w-full border text-lg text-black rounded-md p-3 focus:border-blue-500 ${
+                errors.email ? 'border-red-500' : 'border-[#969696]'
+              }`}
               type="email"
               id="email"
               placeholder="Enter your email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                clearFieldError('email');
+              }}
             />
+            {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
           </div>
 
           {showOtpField && (
             <div className="relative">
               <input
-                className="w-full border border-[#969696] text-lg text-black rounded-md p-3 focus:border-blue-500"
+                className={`w-full border text-lg text-black rounded-md p-3 focus:border-blue-500 ${
+                  errors.otp ? 'border-red-500' : 'border-[#969696]'
+                }`}
                 type={showOtp ? "text" : "password"}
                 id="otp"
                 placeholder="Enter OTP"
                 value={otp}
-                onChange={(e) => setOtp(e.target.value)}
+                onChange={(e) => {
+                  setOtp(e.target.value);
+                  clearFieldError('otp');
+                }}
               />
               <button
                 type="button"
@@ -253,6 +324,7 @@ const Login = () => {
               >
                 {showOtp ? <EyeOff size={22} /> : <Eye size={22} />}
               </button>
+              {errors.otp && <p className="text-red-500 text-sm mt-1">{errors.otp}</p>}
             </div>
           )}
           <button
@@ -299,6 +371,7 @@ const Login = () => {
               </>
             )}
           </button>
+          <p className="text-center text-[#969696]">You need to sign up first to use Google Auth</p>
         </div>
         <p className="text-center text-[#969696] mt-3">
           Don&apos;t have an account?{" "}

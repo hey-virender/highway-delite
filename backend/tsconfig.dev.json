@@ -10,18 +10,17 @@
     /* Interop Constraints */
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    /* Type Checking - Made lenient for deployment */
-    "strict": false,
-    "noImplicitAny": false,
-    "noImplicitThis": false,
-    "noImplicitReturns": false,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": false,
-    /* Additional lenient options */
+    /* Type Checking - Strict for development */
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    /* Additional strict options */
     "skipLibCheck": true,
-    "allowUnusedLabels": true,
-    "allowUnreachableCode": true,
+    "exactOptionalPropertyTypes": true,
     /* Module Resolution */
     "moduleResolution": "node",
     "resolveJsonModule": true,

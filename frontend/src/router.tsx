@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
-import SSOCallback from './pages/SSOCallback';
 import ProtectedRoute from './components/ProtectedRoute';
 import AuthGuard from './components/AuthGuard';
 
@@ -35,8 +34,7 @@ export default function AppRouter() {
             </AuthGuard>
           } 
         />
-        {/* SSO callback route - unprotected, handles Google OAuth sync */}
-        <Route path="/sso-callback" element={<SSOCallback />} />
+
         {/* Protected routes - require authentication */}
         <Route 
           path="/dashboard" 

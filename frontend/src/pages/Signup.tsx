@@ -27,19 +27,51 @@ const Signup = () => {
   const [otp, setOtp] = useState("");
   const [showOtpField, setShowOtpField] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  
+  // Error states for each field
+  const [errors, setErrors] = useState({
+    name: "",
+    email: "",
+    dob: "",
+    otp: ""
+  });
+
+  // Clear error for specific field when user starts typing
+  const clearFieldError = (fieldName: keyof typeof errors) => {
+    if (errors[fieldName]) {
+      setErrors(prev => ({ ...prev, [fieldName]: "" }));
+    }
+  };
 
   const handleSendOtp = async () => {
+    // Clear all previous errors
+    setErrors({ name: "", email: "", dob: "", otp: "" });
+
     const formData = {
       name,
       email,
-      dob,
-      otp,
+      dob: dob ? new Date(dob) : undefined,
     };
+
     const validation = signupSchema.safeParse(formData);
     if (!validation.success) {
+      // Map validation errors to specific fields
+      const fieldErrors = { name: "", email: "", dob: "", otp: "" };
+      
+      validation.error.errors.forEach((error) => {
+        const fieldName = error.path[0] as keyof typeof fieldErrors;
+        if (fieldName && fieldErrors.hasOwnProperty(fieldName)) {
+          fieldErrors[fieldName] = error.message;
+        }
+      });
+      
+      setErrors(fieldErrors);
+      
+      // Also show toast for the first error for immediate feedback
       toast.error(validation.error.errors[0].message);
       return;
     }
+
     try {
       // First create the sign-up with a temporary password
       await signUp!.create({
@@ -62,7 +94,11 @@ const Signup = () => {
   };
 
   const handleVerifyOtp = async () => {
+    // Clear OTP error
+    setErrors(prev => ({ ...prev, otp: "" }));
+    
     if (!otp) {
+      setErrors(prev => ({ ...prev, otp: "Please enter the OTP" }));
       toast.error("Please enter the OTP");
       return;
     }
@@ -175,13 +211,19 @@ const Signup = () => {
               Your Name
             </label>
             <input
-              className="w-full border border-[#969696] text-lg text-black rounded-md p-3 focus:border-blue-500"
+              className={`w-full border text-lg text-black rounded-md p-3 focus:border-blue-500 ${
+                errors.name ? 'border-red-500' : 'border-[#969696]'
+              }`}
               type="text"
               id="name"
               placeholder="Enter your name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                clearFieldError('name');
+              }}
             />
+                         {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
           </div>
           <div className="relative">
             <label
@@ -191,7 +233,9 @@ const Signup = () => {
               Date of Birth
             </label>
             <div
-              className="flex items-center border border-[#969696] rounded-md p-3 w-full focus-within:border-blue-500 bg-white relative cursor-pointer"
+              className={`flex items-center border rounded-md p-3 w-full focus-within:border-blue-500 bg-white relative cursor-pointer ${
+                errors.dob ? 'border-red-500' : 'border-[#969696]'
+              }`}
               onClick={() => inputRef.current?.showPicker()}
               tabIndex={0}
               role="button"
@@ -206,7 +250,10 @@ const Signup = () => {
                 type="date"
                 id="dob"
                 value={dob}
-                onChange={(e) => setDob(e.target.value)}
+                onChange={(e) => {
+                  setDob(e.target.value);
+                  clearFieldError('dob');
+                }}
                 tabIndex={-1}
                 aria-label="Date of Birth"
                 style={{
@@ -221,6 +268,7 @@ const Signup = () => {
                 )}
               </span>
             </div>
+                         {errors.dob && <p className="text-red-500 text-sm mt-1">{errors.dob}</p>}
           </div>
 
           <div className="relative">
@@ -231,24 +279,35 @@ const Signup = () => {
               Email
             </label>
             <input
-              className="w-full border border-[#969696] text-lg text-black rounded-md p-3 focus:border-blue-500"
+              className={`w-full border text-lg text-black rounded-md p-3 focus:border-blue-500 ${
+                errors.email ? 'border-red-500' : 'border-[#969696]'
+              }`}
               type="email"
               id="email"
               placeholder="Enter your email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                clearFieldError('email');
+              }}
             />
+                         {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
           </div>
 
           {showOtpField && (
             <div className="relative">
               <input
-                className="w-full border border-[#969696] text-lg text-black rounded-md p-3 focus:border-blue-500"
+                className={`w-full border text-lg text-black rounded-md p-3 focus:border-blue-500 ${
+                  errors.otp ? 'border-red-500' : 'border-[#969696]'
+                }`}
                 type={showOtp ? "text" : "password"}
                 id="otp"
                 placeholder="OTP"
                 value={otp}
-                onChange={(e) => setOtp(e.target.value)}
+                onChange={(e) => {
+                  setOtp(e.target.value);
+                  clearFieldError('otp');
+                }}
               />
               <button
                 type="button"
@@ -257,6 +316,7 @@ const Signup = () => {
               >
                 {showOtp ? <EyeOff size={22} /> : <Eye size={22} />}
               </button>
+              {errors.otp && <p className="text-red-500 text-sm mt-1">{errors.otp}</p>}
             </div>
           )}
 
