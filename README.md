@@ -317,9 +317,16 @@ The project is configured to ignore TypeScript and ESLint errors during deployme
 
 ## 📚 Additional Documentation
 
-- [Frontend Deployment Guide](frontend/DEPLOYMENT.md)
-- [API Documentation](#api-endpoints)
-- [Authentication Guide](#authentication)
+- **[Setup Guide](SETUP.md)** - Detailed step-by-step setup instructions
+- **[API Documentation](API.md)** - Complete API reference with examples
+- **[Contributing Guide](CONTRIBUTING.md)** - Development standards and workflow
+- **[Frontend Deployment Guide](frontend/DEPLOYMENT.md)** - Build configuration and deployment
+
+### Quick Links
+- [Environment Variables Setup](SETUP.md#environment-setup)
+- [Common Issues & Solutions](SETUP.md#common-issues)
+- [API Request Examples](API.md#request-examples)
+- [Development Standards](CONTRIBUTING.md#development-standards)
 
 ## 🤝 Contributing
 
