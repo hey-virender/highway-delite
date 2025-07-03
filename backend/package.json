@@ -1,17 +1,11 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "dist/server.js",
+  "main": "server.js",
   "scripts": {
     "dev": "nodemon",
-    "start": "node dist/server.js",
-    "start:ts": "ts-node server.ts",
-    "build": "tsc --noEmitOnError false",
-    "build:check": "tsc",
-    "build:prod": "NODE_ENV=production tsc --noEmitOnError false",
-    "build:force": "tsc --noEmitOnError false --skipLibCheck",
-    "lint": "eslint . --ext .ts",
-    "lint:fix": "eslint . --ext .ts --fix"
+    "start": "ts-node server.ts",
+    "build": "tsc"
   },
   "keywords": [],
   "author": "",
